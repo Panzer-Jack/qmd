@@ -2,7 +2,7 @@
 name: qmd
 description: Search markdown knowledge bases, notes, and documentation using QMD. Use when users ask to search notes, find documents, or look up information.
 license: MIT
-compatibility: Requires qmd CLI or MCP server. Install via `npm install -g @tobilu/qmd`.
+compatibility: Requires qmd CLI or MCP server. Install via `npm install -g @panzerjack/qmd`.
 metadata:
   author: tobi
   version: "2.0.0"
@@ -15,7 +15,7 @@ Local search engine for markdown content.
 
 ## Status
 
-!`qmd status 2>/dev/null || echo "Not installed: npm install -g @tobilu/qmd"`
+!`qmd status 2>/dev/null || echo "Not installed: npm install -g @panzerjack/qmd"`
 
 ## MCP: `query`
 
@@ -140,7 +140,7 @@ curl -X POST http://localhost:8181/query \
 ## Setup
 
 ```bash
-npm install -g @tobilu/qmd
+npm install -g @panzerjack/qmd
 qmd collection add ~/notes --name notes
 qmd embed
 ```

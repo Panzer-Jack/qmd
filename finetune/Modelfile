@@ -1,4 +1,4 @@
-FROM /home/tobi/src/github.com/tobi/qmd/finetune/outputs/sft/gguf/sft-q4_k_m.gguf
+FROM /home/panzer_jack/src/github.com/Panzer-Jack/qmd/finetune/outputs/sft/gguf/sft-q4_k_m.gguf
 
 PARAMETER temperature 0.0
 PARAMETER top_p 1.0

@@ -1,7 +1,7 @@
 {
-  "name": "@tobilu/qmd",
-  "version": "2.1.0",
-  "description": "Query Markup Documents - On-device hybrid search for markdown files with BM25, vector search, and LLM reranking",
+  "name": "@panzerjack/qmd",
+  "version": "1.0.0",
+  "description": "Local-first CLI search engine for docs & knowledge bases — with first-class CJK support via nodejieba",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -38,11 +38,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tobi/qmd.git"
+    "url": "git+https://github.com/Panzer-Jack/qmd.git"
   },
-  "homepage": "https://github.com/tobi/qmd#readme",
+  "homepage": "https://github.com/Panzer-Jack/qmd#readme",
   "bugs": {
-    "url": "https://github.com/tobi/qmd/issues"
+    "url": "https://github.com/Panzer-Jack/qmd/issues"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.29.0",
@@ -108,6 +108,9 @@
     "local-ai",
     "llm"
   ],
-  "author": "Tobi Lutke <tobi@lutke.com>",
+  "author": "Panzer Jack <panzer_jack@panzer-jack.cn>",
+  "contributors": [
+    "Tobi Lutke <tobi@lutke.com>"
+  ],
   "license": "MIT"
 }

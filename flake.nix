@@ -135,7 +135,7 @@
 
           meta = with pkgs.lib; {
             description = "On-device search engine for markdown notes, meeting transcripts, and knowledge bases";
-            homepage = "https://github.com/tobi/qmd";
+            homepage = "https://github.com/Panzer-Jack/qmd";
             license = licenses.mit;
             platforms = platforms.unix;
           };

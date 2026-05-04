@@ -1,8 +1,8 @@
 {
 	"name": "qmd",
 	"owner": {
-		"name": "tobi",
-		"email": "tobi@lutke.com"
+		"name": "Panzer-Jack",
+		"email": "panzer_jack@panzer-jack.cn"
 	},
 	"plugins": [
 		{
@@ -11,10 +11,10 @@
 			"description": "Search and retrieve documents from local markdown files.",
 			"version": "0.1.0",
 			"author": {
-				"name": "tobi",
-				"email": "tobi@lutke.com"
+				"name": "Panzer-Jack",
+				"email": "panzer_jack@panzer-jack.cn"
 			},
-			"repository": "https://github.com/tobi/qmd",
+			"repository": "https://github.com/Panzer-Jack/qmd",
 			"license": "MIT",
 			"keywords": ["markdown", "search", "qmd"],
 			"skills": ["./skills/"],

@@ -100,7 +100,7 @@ run_smoke_tests() {
     "export PATH=$NODE_BIN:\$PATH;
      NPM_GLOBAL=\$(npm root -g);
      node -e \"
-      const {openDatabase, loadSqliteVec} = await import('\$NPM_GLOBAL/@tobilu/qmd/dist/db.js');
+      const {openDatabase, loadSqliteVec} = await import('\$NPM_GLOBAL/@panzerjack/qmd/dist/db.js');
       const db = openDatabase(':memory:');
       loadSqliteVec(db);
       const r = db.prepare('SELECT vec_version() as v').get();
@@ -129,7 +129,7 @@ run_smoke_tests() {
 
   smoke_test "sqlite-vec loads (bun)" \
     "export PATH=$BUN_BIN:\$PATH; bun -e \"
-      const {openDatabase, loadSqliteVec} = await import('\$HOME/.bun/install/global/node_modules/@tobilu/qmd/dist/db.js');
+      const {openDatabase, loadSqliteVec} = await import('\$HOME/.bun/install/global/node_modules/@panzerjack/qmd/dist/db.js');
       const db = openDatabase(':memory:');
       loadSqliteVec(db);
       const r = db.prepare('SELECT vec_version() as v').get();

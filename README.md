@@ -1,6 +1,10 @@
 # QMD - Query Markup Documents
 
-An on-device search engine for everything you need to remember. Index your markdown notes, meeting transcripts, documentation, and knowledge bases. Search with keywords or natural language. Ideal for your agentic flows.
+> Fork of [tobi/qmd](https://github.com/tobi/qmd) with first-class CJK (Chinese/Japanese/Korean) keyword search support.
+>
+> [中文文档](README.zh-CN.md)
+
+A local-first CLI search engine for docs & knowledge bases — with CJK-aware full-text search via nodejieba segmentation. Tracking current SOTA approaches while being all local.
 
 QMD combines BM25 full-text search, vector semantic search, and LLM re-ranking—all running locally via node-llama-cpp with GGUF models.
 
@@ -8,17 +12,49 @@ QMD combines BM25 full-text search, vector semantic search, and LLM re-ranking�
 
 You can read more about QMD's progress in the [CHANGELOG](CHANGELOG.md).
 
+## What's New in This Fork
+
+### nodejieba-powered CJK Keyword Search
+
+The upstream QMD uses SQLite FTS5 with the `unicode61` tokenizer, which works well for space-delimited languages but fails on CJK text — these languages don't use spaces between words, so FTS5 treats entire sentences as single tokens, resulting in near-zero keyword recall.
+
+This fork solves the problem with a dual-index approach:
+
+1. **nodejieba segmentation** — A sidecar FTS5 table (`documents_fts_cjk`) stores text pre-segmented by [nodejieba](https://github.com/yanyiwu/nodejieba) (search mode). Queries like `开放时间` are segmented into `开放 时间` and matched against the segmented index.
+2. **Trigram fallback** — A second sidecar table (`documents_fts_trigram`) provides substring matching for terms that jieba might not segment correctly (e.g. proper nouns, new words).
+3. **RRF fusion** — CJK results are fused with standard BM25 results via Reciprocal Rank Fusion, so English queries are unaffected.
+
+Features:
+- Zero configuration needed — CJK queries are automatically detected and routed
+- Custom user dictionary support via `QMD_JIEBA_USER_DICT` environment variable
+- Graceful degradation — if nodejieba is unavailable, falls back to trigram-only
+- Sidecar index auto-rebuilds when dictionary or version changes
+
+### Configurable Embedding Model
+
+Override the default embedding model via `QMD_EMBED_MODEL` for better multilingual vector search:
+
+```sh
+export QMD_EMBED_MODEL="hf:Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf"
+qmd embed -f
+```
+
+### Other Changes
+
+- Package published as `@panzerjack/qmd` on npm (upstream: `@tobilu/qmd`)
+- Repository: [Panzer-Jack/qmd](https://github.com/Panzer-Jack/qmd)
+
 ## Quick Start
 
 ```sh
 # Install globally (Node or Bun)
-npm install -g @tobilu/qmd
+npm install -g @panzerjack/qmd
 # or
-bun install -g @tobilu/qmd
+bun install -g @panzerjack/qmd
 
 # Or run directly
-npx @tobilu/qmd ...
-bunx @tobilu/qmd ...
+npx @panzerjack/qmd ...
+bunx @panzerjack/qmd ...
 
 # Create collections for your notes, docs, and meeting transcripts
 qmd collection add ~/notes --name notes
@@ -96,7 +132,7 @@ Although the tool works perfectly fine when you just tell your agent to use it o
 **Claude Code** — Install the plugin (recommended):
 
 ```bash
-claude plugin marketplace add tobi/qmd
+claude plugin marketplace add Panzer-Jack/qmd
 claude plugin install qmd@qmd
 ```
 
@@ -143,13 +179,13 @@ Use QMD as a library in your own Node.js or Bun applications.
 #### Installation
 
 ```sh
-npm install @tobilu/qmd
+npm install @panzerjack/qmd
 ```
 
 #### Quick Start
 
 ```typescript
-import { createStore } from '@tobilu/qmd'
+import { createStore } from '@panzerjack/qmd'
 
 const store = await createStore({
   dbPath: './my-index.sqlite',
@@ -171,7 +207,7 @@ await store.close()
 `createStore()` accepts three modes:
 
 ```typescript
-import { createStore } from '@tobilu/qmd'
+import { createStore } from '@panzerjack/qmd'
 
 // 1. Inline config — no files needed besides the DB
 const store = await createStore({
@@ -350,7 +386,7 @@ import type {
   CollectionConfig,    // Inline config shape
   IndexStatus,         // From getStatus()
   IndexHealthInfo,     // From getIndexHealth()
-} from '@tobilu/qmd'
+} from '@panzerjack/qmd'
 ```
 
 Utility exports:
@@ -361,7 +397,7 @@ import {
   addLineNumbers,              // Add line numbers to text
   DEFAULT_MULTI_GET_MAX_BYTES, // Default max file size for multiGet (10KB)
   Maintenance,                 // Database maintenance operations
-} from '@tobilu/qmd'
+} from '@panzerjack/qmd'
 ```
 
 #### Lifecycle
@@ -519,15 +555,15 @@ Supported model families:
 ## Installation
 
 ```sh
-npm install -g @tobilu/qmd
+npm install -g @panzerjack/qmd
 # or
-bun install -g @tobilu/qmd
+bun install -g @panzerjack/qmd
 ```
 
 ### Development
 
 ```sh
-git clone https://github.com/tobi/qmd
+git clone https://github.com/Panzer-Jack/qmd
 cd qmd
 npm install
 npm link

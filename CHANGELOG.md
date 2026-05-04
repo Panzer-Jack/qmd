@@ -156,7 +156,7 @@ for bun installs.
 
 ## [1.1.6] - 2026-03-09
 
-QMD can now be used as a library. `import { createStore } from '@tobilu/qmd'`
+QMD can now be used as a library. `import { createStore } from '@panzerjack/qmd'`
 gives you the full search and indexing API — hybrid query, BM25, structured
 search, collection/context management — without shelling out to the CLI.
 
@@ -167,7 +167,7 @@ search, collection/context management — without shelling out to the CLI.
   `multiGet()`, and collection/context management methods. Supports inline
   config (no files needed) or a YAML config path.
 - **Package exports**: `package.json` now declares `main`, `types`, and
-  `exports` so bundlers and TypeScript resolve `@tobilu/qmd` correctly.
+  `exports` so bundlers and TypeScript resolve `@panzerjack/qmd` correctly.
 
 ## [1.1.5] - 2026-03-07
 
@@ -385,7 +385,7 @@ through parallel GPU contexts. GPU auto-detection replaces the unreliable
 
 ## [0.9.0] - 2026-02-15
 
-First published release on npm as `@tobilu/qmd`. MCP HTTP transport with
+First published release on npm as `@panzerjack/qmd`. MCP HTTP transport with
 daemon mode cuts warm query latency from ~16s to ~10s by keeping models
 loaded between requests.
 
@@ -618,6 +618,6 @@ notes, journals, and meeting transcripts.
 - CLI: `qmd add`, `qmd embed`, `qmd search`, `qmd vsearch`, `qmd query`,
   `qmd get`. ~1800 lines of TypeScript in a single `qmd.ts` file.
 
-[Unreleased]: https://github.com/tobi/qmd/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/tobi/qmd/releases/tag/v1.0.0
-[0.9.0]: https://github.com/tobi/qmd/compare/v0.8.0...v0.9.0
+[Unreleased]: https://github.com/Panzer-Jack/qmd/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/Panzer-Jack/qmd/releases/tag/v1.0.0
+[0.9.0]: https://github.com/Panzer-Jack/qmd/compare/v0.8.0...v0.9.0

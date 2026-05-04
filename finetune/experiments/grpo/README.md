@@ -12,7 +12,7 @@ It is not part of the default production pipeline.
 
 ```bash
 # Recommended default: run from repo root
-cd /home/tobi/qmd
+cd /home/panzer_jack/qmd
 uv run finetune/experiments/grpo/grpo.py
 
 # Or use unified entrypoint (deprecated in main pipeline):
