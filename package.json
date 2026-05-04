@@ -1,6 +1,6 @@
 {
   "name": "@panzerjack/qmd",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Local-first CLI search engine for docs & knowledge bases — with first-class CJK support via nodejieba",
   "type": "module",
   "main": "dist/index.js",
