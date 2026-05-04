@@ -170,6 +170,24 @@ async function insertTestDocument(
   return Number(result.lastInsertRowid);
 }
 
+async function insertTestDocumentViaStore(
+  store: Store,
+  collectionName: string,
+  opts: {
+    title?: string;
+    displayPath?: string;
+    body: string;
+  }
+): Promise<void> {
+  const now = new Date().toISOString();
+  const title = opts.title || "Test Document";
+  const path = opts.displayPath || "test/doc.md";
+  const hash = await hashContent(opts.body);
+
+  store.insertContent(hash, opts.body, now);
+  store.insertDocument(collectionName, path, title, hash, now, now);
+}
+
 /** Sync YAML config file to SQLite store_collections in the current test store */
 async function syncTestConfig(): Promise<void> {
   if (!currentTestStore) return;
@@ -1263,6 +1281,65 @@ describe("FTS Search", () => {
     const results = store.searchFTS("foo(bar)", 10);
     // Results may vary based on FTS5 handling
     expect(Array.isArray(results)).toBe(true);
+
+    await cleanupTestDb(store);
+  });
+
+  test("searchFTS finds Chinese terms inside an unspaced sentence", async () => {
+    const store = await createTestStore();
+    const collectionName = await createTestCollection();
+
+    await insertTestDocumentViaStore(store, collectionName, {
+      title: "图书馆说明",
+      body: "图书馆开放时间在哪里，读者可以在官网查看节假日安排。",
+      displayPath: "docs/library-hours.md",
+    });
+
+    const results = store.searchFTS("开放时间", 10);
+    expect(results.length).toBeGreaterThan(0);
+    expect(results[0]!.displayPath).toBe(`${collectionName}/docs/library-hours.md`);
+
+    await cleanupTestDb(store);
+  });
+
+  test("searchFTS updates CJK indexes when a document changes", async () => {
+    const store = await createTestStore();
+    const collectionName = await createTestCollection();
+    const now = new Date().toISOString();
+
+    const oldBody = "图书馆开放时间在哪里";
+    const oldHash = await hashContent(oldBody);
+    store.insertContent(oldHash, oldBody, now);
+    store.insertDocument(collectionName, "docs/library.md", "旧图书馆说明", oldHash, now, now);
+
+    const newBody = "城市公园停车入口在哪里";
+    const newHash = await hashContent(newBody);
+    store.insertContent(newHash, newBody, now);
+    const existing = store.findActiveDocument(collectionName, "docs/library.md");
+    expect(existing).not.toBeNull();
+    store.updateDocument(existing!.id, "新公园说明", newHash, now);
+
+    expect(store.searchFTS("开放时间", 10)).toHaveLength(0);
+    const results = store.searchFTS("停车入口", 10);
+    expect(results.length).toBeGreaterThan(0);
+    expect(results[0]!.displayPath).toBe(`${collectionName}/docs/library.md`);
+
+    await cleanupTestDb(store);
+  });
+
+  test("searchFTS removes deactivated documents from CJK indexes", async () => {
+    const store = await createTestStore();
+    const collectionName = await createTestCollection();
+
+    await insertTestDocumentViaStore(store, collectionName, {
+      title: "图书馆说明",
+      body: "图书馆开放时间在哪里",
+      displayPath: "docs/library.md",
+    });
+
+    expect(store.searchFTS("开放时间", 10).length).toBeGreaterThan(0);
+    store.deactivateDocument(collectionName, "docs/library.md");
+    expect(store.searchFTS("开放时间", 10)).toHaveLength(0);
 
     await cleanupTestDb(store);
   });
