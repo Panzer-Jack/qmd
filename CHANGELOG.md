@@ -5,6 +5,12 @@
 ### Fixes
 
 - GPU: respect explicit `QMD_LLAMA_GPU=metal|vulkan|cuda` backend overrides instead of always using auto GPU selection. #529
+- BM25: add CJK keyword recall using `nodejieba` search-mode
+  segmentation plus an FTS5 trigram fallback. Chinese queries like
+  `开放时间` can now match unspaced sentences such as
+  `图书馆开放时间在哪里`. Set `QMD_JIEBA_USER_DICT` to load a
+  custom jieba user dictionary for domain terms; CJK sidecar indexes are
+  backfilled automatically for existing databases.
 - Fix: preserve original filename case in `handelize()`. The previous
   `.toLowerCase()` call made indexed paths unreachable on case-sensitive
   filesystems (Linux). `qmd update` automatically migrates legacy

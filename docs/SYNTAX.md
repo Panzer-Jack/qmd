@@ -22,7 +22,7 @@ newline        = "\n" ;
 
 | Type | Method | Description |
 |------|--------|-------------|
-| `lex` | BM25 | Keyword search with exact matching |
+| `lex` | BM25 | Keyword search with exact matching; CJK text is search-tokenized |
 | `vec` | Vector | Semantic similarity search |
 | `hyde` | Vector | Hypothetical document embedding |
 
@@ -39,6 +39,10 @@ expand: how does authentication work
 ## Lex Query Syntax
 
 Lex queries support special syntax for precise keyword matching:
+
+For Chinese/Japanese/Korean text, lex queries are segmented before BM25 search
+using the CJK search index. For example, `lex: 开放时间` can match
+`图书馆开放时间在哪里` even though the document has no spaces.
 
 ```ebnf
 lex_query   = { lex_term } ;

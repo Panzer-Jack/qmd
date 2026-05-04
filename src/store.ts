@@ -33,6 +33,12 @@ import type {
   CollectionConfig,
   ContextMap,
 } from "./collections.js";
+import {
+  hasCjk,
+  isJiebaAvailable,
+  segmentQueryForCjkFts,
+  segmentTextForCjkFts,
+} from "./cjk.js";
 
 // =============================================================================
 // Configuration
@@ -46,6 +52,7 @@ export const DEFAULT_GLOB = "**/*.md";
 export const DEFAULT_MULTI_GET_MAX_BYTES = 10 * 1024; // 10KB
 export const DEFAULT_EMBED_MAX_DOCS_PER_BATCH = 64;
 export const DEFAULT_EMBED_MAX_BATCH_BYTES = 64 * 1024 * 1024; // 64MB
+const SUPPLEMENTAL_FTS_VERSION = "1";
 
 // Chunking: 900 tokens per chunk with 15% overlap
 // Increased from 800 to accommodate smart chunking finding natural break points
@@ -838,7 +845,33 @@ function initializeDatabase(db: Database): void {
     )
   `);
 
-  // Triggers to keep FTS in sync
+  db.exec(`
+    CREATE VIRTUAL TABLE IF NOT EXISTS documents_fts_cjk USING fts5(
+      filepath, title, body,
+      tokenize='unicode61'
+    )
+  `);
+
+  let hasTrigramFts = true;
+  try {
+    db.exec(`
+      CREATE VIRTUAL TABLE IF NOT EXISTS documents_fts_trigram USING fts5(
+        filepath, title, body,
+        tokenize='trigram'
+      )
+    `);
+  } catch (error) {
+    hasTrigramFts = false;
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`SQLite trigram tokenizer unavailable; CJK substring fallback disabled (${message})`);
+  }
+
+  // Triggers to keep FTS in sync. Drop first so existing databases pick up
+  // supplemental FTS cleanup statements when the schema evolves.
+  db.exec(`DROP TRIGGER IF EXISTS documents_ai`);
+  db.exec(`DROP TRIGGER IF EXISTS documents_ad`);
+  db.exec(`DROP TRIGGER IF EXISTS documents_au`);
+
   db.exec(`
     CREATE TRIGGER IF NOT EXISTS documents_ai AFTER INSERT ON documents
     WHEN new.active = 1
@@ -856,6 +889,8 @@ function initializeDatabase(db: Database): void {
   db.exec(`
     CREATE TRIGGER IF NOT EXISTS documents_ad AFTER DELETE ON documents BEGIN
       DELETE FROM documents_fts WHERE rowid = old.id;
+      DELETE FROM documents_fts_cjk WHERE rowid = old.id;
+      ${hasTrigramFts ? "DELETE FROM documents_fts_trigram WHERE rowid = old.id;" : ""}
     END
   `);
 
@@ -864,6 +899,8 @@ function initializeDatabase(db: Database): void {
     BEGIN
       -- Delete from FTS if no longer active
       DELETE FROM documents_fts WHERE rowid = old.id AND new.active = 0;
+      DELETE FROM documents_fts_cjk WHERE rowid = old.id AND new.active = 0;
+      ${hasTrigramFts ? "DELETE FROM documents_fts_trigram WHERE rowid = old.id AND new.active = 0;" : ""}
 
       -- Update FTS if still/newly active
       INSERT OR REPLACE INTO documents_fts(rowid, filepath, title, body)
@@ -875,6 +912,120 @@ function initializeDatabase(db: Database): void {
       WHERE new.active = 1;
     END
   `);
+
+  ensureSupplementalFtsBackfilled(db);
+}
+
+type SupplementalFtsRow = {
+  id: number;
+  filepath: string;
+  title: string;
+  body: string;
+};
+
+function supplementalFtsVersion(): string {
+  const userDict = process.env.QMD_JIEBA_USER_DICT?.trim() || "default";
+  return `${SUPPLEMENTAL_FTS_VERSION}:${isJiebaAvailable() ? "jieba" : "trigram-only"}:${userDict}`;
+}
+
+function ftsTableExists(db: Database, tableName: "documents_fts_cjk" | "documents_fts_trigram"): boolean {
+  return !!db.prepare(
+    `SELECT name FROM sqlite_master WHERE type='table' AND name = ?`
+  ).get(tableName);
+}
+
+function deleteSupplementalFtsRows(db: Database, rowid: number): void {
+  db.prepare(`DELETE FROM documents_fts_cjk WHERE rowid = ?`).run(rowid);
+  if (ftsTableExists(db, "documents_fts_trigram")) {
+    db.prepare(`DELETE FROM documents_fts_trigram WHERE rowid = ?`).run(rowid);
+  }
+}
+
+function insertSupplementalFtsRow(db: Database, row: SupplementalFtsRow): void {
+  db.prepare(`
+    INSERT OR REPLACE INTO documents_fts_cjk(rowid, filepath, title, body)
+    VALUES (?, ?, ?, ?)
+  `).run(
+    row.id,
+    segmentTextForCjkFts(row.filepath),
+    segmentTextForCjkFts(row.title),
+    segmentTextForCjkFts(row.body)
+  );
+
+  if (ftsTableExists(db, "documents_fts_trigram")) {
+    db.prepare(`
+      INSERT OR REPLACE INTO documents_fts_trigram(rowid, filepath, title, body)
+      VALUES (?, ?, ?, ?)
+    `).run(row.id, row.filepath, row.title, row.body);
+  }
+}
+
+function refreshSupplementalFtsForDocument(db: Database, documentId: number): void {
+  deleteSupplementalFtsRows(db, documentId);
+
+  const row = db.prepare(`
+    SELECT
+      d.id,
+      d.collection || '/' || d.path as filepath,
+      d.title,
+      content.doc as body
+    FROM documents d
+    JOIN content ON content.hash = d.hash
+    WHERE d.id = ? AND d.active = 1
+  `).get(documentId) as SupplementalFtsRow | undefined;
+
+  if (row) insertSupplementalFtsRow(db, row);
+}
+
+function refreshSupplementalFtsForPath(db: Database, collectionName: string, path: string): void {
+  const row = db.prepare(`
+    SELECT id FROM documents
+    WHERE collection = ? AND path = ?
+  `).get(collectionName, path) as { id: number } | undefined;
+
+  if (row) refreshSupplementalFtsForDocument(db, row.id);
+}
+
+function rebuildSupplementalFts(db: Database): void {
+  const rows = db.prepare(`
+    SELECT
+      d.id,
+      d.collection || '/' || d.path as filepath,
+      d.title,
+      content.doc as body
+    FROM documents d
+    JOIN content ON content.hash = d.hash
+    WHERE d.active = 1
+    ORDER BY d.id
+  `).all() as SupplementalFtsRow[];
+
+  const rebuild = db.transaction(() => {
+    db.prepare(`DELETE FROM documents_fts_cjk`).run();
+    if (ftsTableExists(db, "documents_fts_trigram")) {
+      db.prepare(`DELETE FROM documents_fts_trigram`).run();
+    }
+
+    for (const row of rows) {
+      insertSupplementalFtsRow(db, row);
+    }
+
+    db.prepare(`
+      INSERT INTO store_config (key, value)
+      VALUES ('supplemental_fts_version', ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value
+    `).run(supplementalFtsVersion());
+  });
+
+  rebuild();
+}
+
+function ensureSupplementalFtsBackfilled(db: Database): void {
+  const row = db.prepare(`
+    SELECT value FROM store_config WHERE key = 'supplemental_fts_version'
+  `).get() as { value: string } | undefined;
+
+  if (row?.value === supplementalFtsVersion()) return;
+  rebuildSupplementalFts(db);
 }
 
 // =============================================================================
@@ -2098,6 +2249,8 @@ export function insertDocument(
       modified_at = excluded.modified_at,
       active = 1
   `).run(collectionName, path, title, hash, createdAt, modifiedAt);
+
+  refreshSupplementalFtsForPath(db, collectionName, path);
 }
 
 /**
@@ -2157,6 +2310,7 @@ export function findOrMigrateLegacyDocument(
              (SELECT doc FROM content WHERE hash = documents.hash)
       FROM documents WHERE id = ?
     `).run(legacy.id);
+    refreshSupplementalFtsForDocument(db, legacy.id);
 
     return true;
   });
@@ -2177,6 +2331,7 @@ export function updateDocumentTitle(
 ): void {
   db.prepare(`UPDATE documents SET title = ?, modified_at = ? WHERE id = ?`)
     .run(title, modifiedAt, documentId);
+  refreshSupplementalFtsForDocument(db, documentId);
 }
 
 /**
@@ -2192,6 +2347,7 @@ export function updateDocument(
 ): void {
   db.prepare(`UPDATE documents SET title = ?, hash = ?, modified_at = ? WHERE id = ?`)
     .run(title, hash, modifiedAt, documentId);
+  refreshSupplementalFtsForDocument(db, documentId);
 }
 
 /**
@@ -2200,6 +2356,7 @@ export function updateDocument(
 export function deactivateDocument(db: Database, collectionName: string, path: string): void {
   db.prepare(`UPDATE documents SET active = 0 WHERE collection = ? AND path = ? AND active = 1`)
     .run(collectionName, path);
+  refreshSupplementalFtsForPath(db, collectionName, path);
 }
 
 /**
@@ -2692,6 +2849,7 @@ export function renameCollection(db: Database, oldName: string, newName: string)
   // Update all documents with the new collection name in database
   db.prepare(`UPDATE documents SET collection = ? WHERE collection = ?`)
     .run(newName, oldName);
+  rebuildSupplementalFts(db);
 
   // Rename in store_collections
   renameStoreCollection(db, oldName, newName);
@@ -3022,9 +3180,48 @@ export function validateLexQuery(query: string): string | null {
   return null;
 }
 
-export function searchFTS(db: Database, query: string, limit: number = 20, collectionName?: string): SearchResult[] {
-  const ftsQuery = buildFTS5Query(query);
+type FtsTableName = "documents_fts" | "documents_fts_cjk" | "documents_fts_trigram";
+
+const CJK_QUERY_STOP_WORDS = new Set([
+  "的", "了", "吗", "呢", "啊", "吧", "和", "与", "及", "或",
+  "我", "你", "他", "她", "它", "们", "想", "要", "看", "查",
+  "找", "知道", "请问", "一下", "这个", "那个", "哪些", "什么",
+  "怎么", "如何", "哪里", "在哪", "有没有", "是否", "关于",
+]);
+
+function buildCjkFTS5Query(query: string): string | null {
+  const tokens = segmentQueryForCjkFts(query)
+    .map(t => sanitizeFTS5Term(t))
+    .filter(t => t && !CJK_QUERY_STOP_WORDS.has(t));
+
+  const deduped = Array.from(new Set(tokens));
+  const selected = deduped.length > 8
+    ? deduped.filter(t => [...t].length > 1).slice(0, 8)
+    : deduped;
+
+  if (selected.length === 0) return null;
+  return selected.map(term => `"${term}"*`).join(" AND ");
+}
+
+function buildTrigramFTS5Query(query: string): string | null {
+  const compact = query
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .replace(/[^\p{L}\p{N}_]/gu, "");
+
+  if ([...compact].length < 3) return null;
+  return `"${compact}"`;
+}
+
+function searchFtsTable(
+  db: Database,
+  tableName: FtsTableName,
+  ftsQuery: string | null,
+  limit: number,
+  collectionName?: string
+): SearchResult[] {
   if (!ftsQuery) return [];
+  if (tableName !== "documents_fts" && !ftsTableExists(db, tableName)) return [];
 
   // Use a CTE to force FTS5 to run first, then filter by collection.
   // Without the CTE, SQLite's query planner combines FTS5 MATCH with the
@@ -3040,9 +3237,9 @@ export function searchFTS(db: Database, query: string, limit: number = 20, colle
 
   let sql = `
     WITH fts_matches AS (
-      SELECT rowid, bm25(documents_fts, 1.5, 4.0, 1.0) as bm25_score
-      FROM documents_fts
-      WHERE documents_fts MATCH ?
+      SELECT rowid, bm25(${tableName}, 1.5, 4.0, 1.0) as bm25_score
+      FROM ${tableName}
+      WHERE ${tableName} MATCH ?
       ORDER BY bm25_score ASC
       LIMIT ${ftsLimit}
     )
@@ -3091,6 +3288,66 @@ export function searchFTS(db: Database, query: string, limit: number = 20, colle
       source: "fts" as const,
     };
   });
+}
+
+function mergeFtsResults(
+  lists: { results: SearchResult[]; priority: number }[],
+  limit: number
+): SearchResult[] {
+  const best = new Map<string, { result: SearchResult; priority: number }>();
+
+  for (const list of lists) {
+    for (const result of list.results) {
+      const existing = best.get(result.filepath);
+      if (!existing
+        || result.score > existing.result.score
+        || (result.score === existing.result.score && list.priority < existing.priority)) {
+        best.set(result.filepath, { result, priority: list.priority });
+      }
+    }
+  }
+
+  return Array.from(best.values())
+    .sort((a, b) => {
+      if (b.result.score !== a.result.score) return b.result.score - a.result.score;
+      return a.priority - b.priority;
+    })
+    .slice(0, limit)
+    .map(entry => entry.result);
+}
+
+export function searchFTS(db: Database, query: string, limit: number = 20, collectionName?: string): SearchResult[] {
+  const baseResults = searchFtsTable(
+    db,
+    "documents_fts",
+    buildFTS5Query(query),
+    limit,
+    collectionName
+  );
+
+  if (!hasCjk(query)) return baseResults;
+
+  const cjkResults = searchFtsTable(
+    db,
+    "documents_fts_cjk",
+    buildCjkFTS5Query(query),
+    limit,
+    collectionName
+  );
+
+  const trigramResults = searchFtsTable(
+    db,
+    "documents_fts_trigram",
+    buildTrigramFTS5Query(query),
+    limit,
+    collectionName
+  );
+
+  return mergeFtsResults([
+    { results: baseResults, priority: 0 },
+    { results: cjkResults, priority: 1 },
+    { results: trigramResults, priority: 2 },
+  ], limit);
 }
 
 // =============================================================================

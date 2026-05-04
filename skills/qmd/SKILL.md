@@ -34,7 +34,7 @@ Local search engine for markdown content.
 
 | Type | Method | Input |
 |------|--------|-------|
-| `lex` | BM25 | Keywords — exact terms, names, code |
+| `lex` | BM25 | Keywords — exact terms, names, code, CJK search terms |
 | `vec` | Vector | Question — natural language |
 | `hyde` | Vector | Answer — hypothetical result (50-100 words) |
 
@@ -45,6 +45,7 @@ Local search engine for markdown content.
 - Exact phrase: `"connection pool"` (quoted)
 - Exclude terms: `performance -sports` (minus prefix)
 - Code identifiers work: `handleError async`
+- Chinese/Japanese/Korean terms work without spaces: `开放时间`
 
 **vec (semantic)**
 - Full natural language question
@@ -122,6 +123,7 @@ qmd query $'lex: X\nvec: Y'       # Structured
 qmd query $'expand: question'     # Explicit expand
 qmd query --json --explain "q"    # Show score traces (RRF + rerank blend)
 qmd search "keywords"             # BM25 only (no LLM)
+qmd search "开放时间"              # CJK BM25 keyword search
 qmd get "#abc123"                 # By docid
 qmd multi-get "journals/2026-*.md" -l 40  # Batch pull snippets by glob
 qmd multi-get notes/foo.md,notes/bar.md   # Comma-separated list, preserves order

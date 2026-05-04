@@ -68,7 +68,7 @@ Search with pre-expanded queries.
 
 | Type | Method | Input |
 |------|--------|-------|
-| `lex` | BM25 | Keywords (2-5 terms) |
+| `lex` | BM25 | Keywords (2-5 terms, including CJK terms without spaces) |
 | `vec` | Vector | Question |
 | `hyde` | Vector | Answer passage (50-100 words) |
 

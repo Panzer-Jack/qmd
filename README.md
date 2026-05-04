@@ -35,6 +35,7 @@ qmd embed
 
 # Search across everything
 qmd search "project timeline"           # Fast keyword search
+qmd search "开放时间"                    # Chinese keyword search (no spaces required)
 qmd vsearch "how to deploy"             # Semantic search
 qmd query "quarterly planning process"  # Hybrid + reranking (best quality)
 
@@ -622,8 +623,9 @@ qmd context rm qmd://notes/old
 ```
 
 ```sh
-# Full-text search (fast, keyword-based)
+# Full-text search (fast, keyword-based; CJK uses nodejieba segmentation)
 qmd search "authentication flow"
+qmd search "开放时间"
 
 # Vector search (semantic similarity)
 qmd vsearch "how to login"
@@ -661,6 +663,24 @@ qmd get <file>[:line]  # Get document, optionally starting at line
 -l <num>           # Maximum lines per file
 --max-bytes <num>  # Skip files larger than N bytes (default: 10KB)
 ```
+
+### CJK Keyword Search
+
+`qmd search` and `lex:` queries support Chinese/Japanese/Korean keyword
+recall in unspaced text. QMD indexes a `nodejieba` search-mode tokenized
+sidecar FTS table for CJK text, with an SQLite trigram index as a substring
+fallback. This lets a query like `开放时间` match a sentence such as
+`图书馆开放时间在哪里` while preserving the existing English BM25 path.
+
+For project-specific Chinese terms, provide a jieba user dictionary:
+
+```sh
+export QMD_JIEBA_USER_DICT=/path/to/userdict.utf8
+qmd update
+```
+
+Changing `QMD_JIEBA_USER_DICT` changes the CJK sidecar index profile; QMD
+rebuilds that sidecar index the next time the database is opened.
 
 ### Output Format
 
@@ -783,13 +803,15 @@ Index stored in: `~/.cache/qmd/index.sqlite`
 ### Schema
 
 ```sql
-collections     -- Indexed directories with name and glob patterns
-path_contexts   -- Context descriptions by virtual path (qmd://...)
-documents       -- Markdown content with metadata and docid (6-char hash)
-documents_fts   -- FTS5 full-text index
-content_vectors -- Embedding chunks (hash, seq, pos, 900 tokens each)
-vectors_vec     -- sqlite-vec vector index (hash_seq key)
-llm_cache       -- Cached LLM responses (query expansion, rerank scores)
+collections            -- Indexed directories with name and glob patterns
+path_contexts          -- Context descriptions by virtual path (qmd://...)
+documents              -- Markdown content with metadata and docid (6-char hash)
+documents_fts          -- FTS5 full-text index
+documents_fts_cjk      -- CJK tokenized FTS5 sidecar index
+documents_fts_trigram  -- CJK substring fallback FTS5 sidecar index
+content_vectors        -- Embedding chunks (hash, seq, pos, 900 tokens each)
+vectors_vec            -- sqlite-vec vector index (hash_seq key)
+llm_cache              -- Cached LLM responses (query expansion, rerank scores)
 ```
 
 ## Environment Variables
@@ -797,6 +819,7 @@ llm_cache       -- Cached LLM responses (query expansion, rerank scores)
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `XDG_CACHE_HOME` | `~/.cache` | Cache directory location |
+| `QMD_JIEBA_USER_DICT` | unset | Optional jieba user dictionary for CJK keyword search |
 
 ## How It Works
 
@@ -812,7 +835,8 @@ Collection ──► Glob Pattern ──► Markdown Files ──► Parse Title
     └──────────────────────────────────────────────────►└──► Store in SQLite
                                                                        │
                                                                        ▼
-                                                                  FTS5 Index
+                                                                  FTS5 Indexes
+                                                                  (BM25 + CJK)
 ```
 
 ### Embedding Flow
